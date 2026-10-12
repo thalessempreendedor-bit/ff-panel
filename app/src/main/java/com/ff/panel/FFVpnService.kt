@@ -4,9 +4,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.DatagramPacket
@@ -21,6 +23,7 @@ class FFVpnService : VpnService() {
     @Volatile private var running = true
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d("FFVpn", "onStartCommand chegou")
         startForegroundNotif()
         if (tun != null) return START_STICKY
         val b = Builder()
@@ -32,6 +35,7 @@ class FFVpnService : VpnService() {
         try { b.addAllowedApplication("com.dts.freefireth") } catch (_: Exception) {}
         try { b.addAllowedApplication("com.dts.freefiremax") } catch (_: Exception) {}
         tun = b.establish()
+        Log.d("FFVpn", "tun estabelecido: ${tun != null}")
         thread(name = "vpn-reader") { tunLoop() }
         return START_STICKY
     }
@@ -42,9 +46,13 @@ class FFVpnService : VpnService() {
         val output = FileOutputStream(pfd.fileDescriptor)
         val buffer = ByteArray(32767)
         val relay = mutableMapOf<String, DatagramSocket>()
+        Log.d("FFVpn", "tunLoop iniciado")
 
         while (running) {
-            val n = try { input.read(buffer) } catch (e: Exception) { break }
+            val n = try { input.read(buffer) } catch (e: Exception) {
+                Log.d("FFVpn", "read erro: ${e.message}")
+                break
+            }
             if (n <= 0) continue
             val version = (buffer[0].toInt() and 0xF0) shr 4
             if (version != 4) continue
@@ -57,6 +65,7 @@ class FFVpnService : VpnService() {
             val dstPort = ((buffer[ihl+2].toInt() and 0xFF) shl 8) or (buffer[ihl+3].toInt() and 0xFF)
             val off = ihl + 8
             val plen = n - off
+            Log.d("FFVpn", "udp $srcPort -> $dstPort len=$plen")
             if (dstPort !in PacketParser.FF_PORTS && srcPort !in PacketParser.FF_PORTS) continue
             PacketParser.parse(buffer.copyOfRange(off, off + plen), plen)
             ParserBridge.notifyUpdate()
@@ -99,11 +108,18 @@ class FFVpnService : VpnService() {
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(ch)
         val n = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "ffp")
                 else Notification.Builder(this)
-        startForeground(1, n.setContentTitle("FF Panel ativo")
-            .setSmallIcon(android.R.drawable.ic_menu_view).build())
+        val notif = n.setContentTitle("FF Panel ativo")
+            .setSmallIcon(android.R.drawable.ic_menu_view).build()
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(1, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(1, notif)
+        }
     }
 
     override fun onDestroy() {
-        running = false; tun?.close(); super.onDestroy()
+        running = false
+        tun?.close()
+        super.onDestroy()
     }
 }

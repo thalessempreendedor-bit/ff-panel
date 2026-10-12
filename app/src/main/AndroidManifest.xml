@@ -16,6 +16,7 @@
         </activity>
         <service android:name=".FFVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.net.VpnService"/>

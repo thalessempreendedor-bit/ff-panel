@@ -49,6 +49,6 @@ class MainActivity : Activity() {
     override fun onActivityResult(req: Int, res: Int, d: Intent?) {
         super.onActivityResult(req, res, d)
         if (req == VPN_REQ && res == RESULT_OK)
-            startService(Intent(this, FFVpnService::class.java))
+            startForegroundService(Intent(this, FFVpnService::class.java))
     }
 }
